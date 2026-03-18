@@ -475,6 +475,8 @@ export async function startServer(): Promise<StartedServer> {
     bindHost: config.host,
     authReady,
     companyDeletionEnabled: config.companyDeletionEnabled,
+    isCellMode: config.isCellMode,
+    cellId: config.cellId,
     betterAuthHandler,
     resolveSession,
   });
