@@ -1,0 +1,15 @@
+{
+  "name": "@paperclipai/control-plane",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "src/index.ts",
+  "dependencies": {
+    "drizzle-orm": "^0.38.0",
+    "express": "^5.1.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "vitest": "^3.0.0"
+  }
+}

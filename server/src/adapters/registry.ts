@@ -1,5 +1,13 @@
 import type { ServerAdapterModule } from "./types.js";
 import {
+  execute as bedrockAgentCoreExecute,
+  testEnvironment as bedrockAgentCoreTestEnvironment,
+} from "@paperclipai/adapter-bedrock-agentcore/server";
+import {
+  agentConfigurationDoc as bedrockAgentCoreAgentConfigurationDoc,
+  models as bedrockAgentCoreModels,
+} from "@paperclipai/adapter-bedrock-agentcore";
+import {
   execute as claudeExecute,
   testEnvironment as claudeTestEnvironment,
   sessionCodec as claudeSessionCodec,
@@ -62,6 +70,15 @@ import {
 } from "hermes-paperclip-adapter";
 import { processAdapter } from "./process/index.js";
 import { httpAdapter } from "./http/index.js";
+
+const bedrockAgentCoreAdapter: ServerAdapterModule = {
+  type: "bedrock_agentcore",
+  execute: bedrockAgentCoreExecute,
+  testEnvironment: bedrockAgentCoreTestEnvironment,
+  models: bedrockAgentCoreModels,
+  supportsLocalAgentJwt: false,
+  agentConfigurationDoc: bedrockAgentCoreAgentConfigurationDoc,
+};
 
 const claudeLocalAdapter: ServerAdapterModule = {
   type: "claude_local",
@@ -148,6 +165,7 @@ const hermesLocalAdapter: ServerAdapterModule = {
 
 const adaptersByType = new Map<string, ServerAdapterModule>(
   [
+    bedrockAgentCoreAdapter,
     claudeLocalAdapter,
     codexLocalAdapter,
     openCodeLocalAdapter,

@@ -9,7 +9,9 @@ import { httpLogger, errorHandler } from "./middleware/index.js";
 import { actorMiddleware } from "./middleware/auth.js";
 import { boardMutationGuard } from "./middleware/board-mutation-guard.js";
 import { privateHostnameGuard, resolvePrivateHostnameAllowSet } from "./middleware/private-hostname-guard.js";
+import { validateCellRequest } from "./middleware/cell-validation.js";
 import { healthRoutes } from "./routes/health.js";
+import { brandingRoutes } from "./routes/branding.js";
 import { companyRoutes } from "./routes/companies.js";
 import { agentRoutes } from "./routes/agents.js";
 import { projectRoutes } from "./routes/projects.js";
@@ -58,6 +60,8 @@ export async function createApp(
     bindHost: string;
     authReady: boolean;
     companyDeletionEnabled: boolean;
+    isCellMode: boolean;
+    cellId: string | undefined;
     instanceId?: string;
     hostVersion?: string;
     localPluginDir?: string;
@@ -92,6 +96,20 @@ export async function createApp(
       resolveSession: opts.resolveSession,
     }),
   );
+
+  // Cell subdomain validation (defense-in-depth, only in cell mode)
+  if (opts.isCellMode) {
+    app.use((req, res, next) => {
+      const host = req.get("host") ?? req.hostname;
+      const result = validateCellRequest(host, opts.cellId);
+      if (!result.valid) {
+        res.status(403).json({ error: result.reason });
+        return;
+      }
+      next();
+    });
+  }
+
   app.get("/api/auth/get-session", (req, res) => {
     if (req.actor.type !== "board" || !req.actor.userId) {
       res.status(401).json({ error: "Unauthorized" });
@@ -209,6 +227,15 @@ export async function createApp(
       allowedHostnames: opts.allowedHostnames,
     }),
   );
+  // Branding endpoint (always mounted, returns appropriate response for both modes)
+  app.use("/api", brandingRoutes({
+    isCellMode: opts.isCellMode,
+    cellId: opts.cellId,
+    brandLogoUrl: process.env.PAPERCLIP_BRAND_LOGO_URL,
+    brandAccentColor: process.env.PAPERCLIP_BRAND_ACCENT_COLOR,
+    brandCustomerName: process.env.PAPERCLIP_BRAND_CUSTOMER_NAME,
+  }));
+
   app.use("/api", api);
   app.use("/api", (_req, res) => {
     res.status(404).json({ error: "API route not found" });
