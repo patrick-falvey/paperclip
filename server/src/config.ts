@@ -70,6 +70,11 @@ export interface Config {
   heartbeatSchedulerEnabled: boolean;
   heartbeatSchedulerIntervalMs: number;
   companyDeletionEnabled: boolean;
+  cellId: string | undefined;
+  cellCustomerId: string | undefined;
+  cellKmsKeyArn: string | undefined;
+  agentCoreRegion: string | undefined;
+  isCellMode: boolean;
 }
 
 export function loadConfig(): Config {
@@ -210,6 +215,11 @@ export function loadConfig(): Config {
       resolveDefaultBackupDir(),
   );
 
+  const cellId = process.env.PAPERCLIP_CELL_ID || undefined;
+  const cellCustomerId = process.env.PAPERCLIP_CELL_CUSTOMER_ID || undefined;
+  const cellKmsKeyArn = process.env.PAPERCLIP_CELL_KMS_KEY_ARN || undefined;
+  const agentCoreRegion = process.env.PAPERCLIP_AGENTCORE_REGION || undefined;
+
   return {
     deploymentMode,
     deploymentExposure,
@@ -252,5 +262,10 @@ export function loadConfig(): Config {
     heartbeatSchedulerEnabled: process.env.HEARTBEAT_SCHEDULER_ENABLED !== "false",
     heartbeatSchedulerIntervalMs: Math.max(10000, Number(process.env.HEARTBEAT_SCHEDULER_INTERVAL_MS) || 30000),
     companyDeletionEnabled,
+    cellId,
+    cellCustomerId,
+    cellKmsKeyArn,
+    agentCoreRegion,
+    isCellMode: Boolean(cellId),
   };
 }
