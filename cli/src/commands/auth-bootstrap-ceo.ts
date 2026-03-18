@@ -3,7 +3,10 @@ import * as p from "@clack/prompts";
 import pc from "picocolors";
 import { and, eq, gt, isNull } from "drizzle-orm";
 import { createDb, instanceUserRoles, invites } from "@paperclipai/db";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync } from "node:fs";
+import path from "node:path";
 import { loadPaperclipEnvFile } from "../config/env.js";
+import { resolveDefaultEmbeddedPostgresDir } from "../config/home.js";
 import { readConfig, resolveConfigPath } from "../config/store.js";
 
 function hashToken(token: string) {
@@ -12,6 +15,19 @@ function hashToken(token: string) {
 
 function createInviteToken() {
   return `pcp_bootstrap_${randomBytes(24).toString("hex")}`;
+}
+
+function readEmbeddedPgPassword(dataDir: string): string {
+  const credentialPath = path.resolve(dataDir, ".pg-password");
+  if (existsSync(credentialPath)) {
+    const stored = readFileSync(credentialPath, "utf8").trim();
+    if (stored.length > 0) return stored;
+  }
+  mkdirSync(dataDir, { recursive: true });
+  const password = randomBytes(24).toString("hex");
+  writeFileSync(credentialPath, password, { mode: 0o600 });
+  try { chmodSync(credentialPath, 0o600); } catch { /* best effort */ }
+  return password;
 }
 
 function resolveDbUrl(configPath?: string, explicitDbUrl?: string) {
@@ -23,7 +39,9 @@ function resolveDbUrl(configPath?: string, explicitDbUrl?: string) {
   }
   if (config?.database.mode === "embedded-postgres") {
     const port = config.database.embeddedPostgresPort ?? 54329;
-    return `postgres://paperclip:paperclip@127.0.0.1:${port}/paperclip`;
+    const dataDir = config.database.embeddedPostgresDataDir ?? resolveDefaultEmbeddedPostgresDir();
+    const pgPassword = readEmbeddedPgPassword(dataDir);
+    return `postgres://paperclip:${pgPassword}@127.0.0.1:${port}/paperclip`;
   }
   return null;
 }

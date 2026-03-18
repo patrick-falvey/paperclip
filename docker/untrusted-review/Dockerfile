@@ -18,7 +18,7 @@ RUN apt-get update \
 RUN ln -sf /usr/bin/fdfind /usr/local/bin/fd
 
 RUN corepack enable \
-  && npm install --global --omit=dev @anthropic-ai/claude-code@latest @openai/codex@latest
+  && npm install --global --omit=dev @anthropic-ai/claude-code@2.1.78 @openai/codex@0.115.0
 
 RUN useradd --create-home --shell /bin/bash reviewer
 

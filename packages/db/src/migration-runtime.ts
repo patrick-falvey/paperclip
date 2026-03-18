@@ -1,9 +1,23 @@
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync, chmodSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { ensurePostgresDatabase } from "./client.js";
 import { resolveDatabaseTarget } from "./runtime-config.js";
+
+function getEmbeddedPgPassword(dataDir: string): string {
+  const credentialPath = path.join(dataDir, ".pg-password");
+  if (existsSync(credentialPath)) {
+    const stored = readFileSync(credentialPath, "utf8").trim();
+    if (stored.length > 0) return stored;
+  }
+  mkdirSync(dataDir, { recursive: true });
+  const password = randomBytes(24).toString("hex");
+  writeFileSync(credentialPath, password, { mode: 0o600 });
+  try { chmodSync(credentialPath, 0o600); } catch { /* best effort */ }
+  return password;
+}
 
 type EmbeddedPostgresInstance = {
   initialise(): Promise<void>;
@@ -80,12 +94,14 @@ async function ensureEmbeddedPostgresConnection(
   const runningPid = readRunningPostmasterPid(postmasterPidFile);
   const runningPort = readPidFilePort(postmasterPidFile);
 
+  const pgPassword = getEmbeddedPgPassword(dataDir);
+
   if (runningPid) {
     const port = runningPort ?? preferredPort;
-    const adminConnectionString = `postgres://paperclip:paperclip@127.0.0.1:${port}/postgres`;
+    const adminConnectionString = `postgres://paperclip:${pgPassword}@127.0.0.1:${port}/postgres`;
     await ensurePostgresDatabase(adminConnectionString, "paperclip");
     return {
-      connectionString: `postgres://paperclip:paperclip@127.0.0.1:${port}/paperclip`,
+      connectionString: `postgres://paperclip:${pgPassword}@127.0.0.1:${port}/paperclip`,
       source: `embedded-postgres@${port}`,
       stop: async () => {},
     };
@@ -94,7 +110,7 @@ async function ensureEmbeddedPostgresConnection(
   const instance = new EmbeddedPostgres({
     databaseDir: dataDir,
     user: "paperclip",
-    password: "paperclip",
+    password: pgPassword,
     port: preferredPort,
     persistent: true,
     initdbFlags: ["--encoding=UTF8", "--locale=C"],
@@ -110,11 +126,11 @@ async function ensureEmbeddedPostgresConnection(
   }
   await instance.start();
 
-  const adminConnectionString = `postgres://paperclip:paperclip@127.0.0.1:${preferredPort}/postgres`;
+  const adminConnectionString = `postgres://paperclip:${pgPassword}@127.0.0.1:${preferredPort}/postgres`;
   await ensurePostgresDatabase(adminConnectionString, "paperclip");
 
   return {
-    connectionString: `postgres://paperclip:paperclip@127.0.0.1:${preferredPort}/paperclip`,
+    connectionString: `postgres://paperclip:${pgPassword}@127.0.0.1:${preferredPort}/paperclip`,
     source: `embedded-postgres@${preferredPort}`,
     stop: async () => {
       await instance.stop();

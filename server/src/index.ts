@@ -28,6 +28,7 @@ import { setupLiveEventsWebSocketServer } from "./realtime/live-events-ws.js";
 import { heartbeatService, reconcilePersistedRuntimeServicesOnStartup } from "./services/index.js";
 import { createStorageServiceFromConfig } from "./storage/index.js";
 import { printStartupBanner } from "./startup-banner.js";
+import { getEmbeddedPgCredentials, buildEmbeddedPgUrl } from "./embedded-pg-credentials.js";
 import { getBoardClaimWarningUrl, initializeBoardClaimChallenge } from "./board-claim.js";
 
 type BetterAuthSessionUser = {
@@ -329,10 +330,11 @@ export async function startServer(): Promise<StartedServer> {
       }
       port = detectedPort;
       logger.info(`Using embedded PostgreSQL because no DATABASE_URL set (dataDir=${dataDir}, port=${port})`);
+      const pgCreds = getEmbeddedPgCredentials(dataDir);
       embeddedPostgres = new EmbeddedPostgres({
         databaseDir: dataDir,
-        user: "paperclip",
-        password: "paperclip",
+        user: pgCreds.user,
+        password: pgCreds.password,
         port,
         persistent: true,
         initdbFlags: ["--encoding=UTF8", "--locale=C"],
@@ -364,13 +366,14 @@ export async function startServer(): Promise<StartedServer> {
       embeddedPostgresStartedByThisProcess = true;
     }
   
-    const embeddedAdminConnectionString = `postgres://paperclip:paperclip@127.0.0.1:${port}/postgres`;
+    const pgCredsForConn = getEmbeddedPgCredentials(dataDir);
+    const embeddedAdminConnectionString = buildEmbeddedPgUrl(pgCredsForConn, port, "postgres");
     const dbStatus = await ensurePostgresDatabase(embeddedAdminConnectionString, "paperclip");
     if (dbStatus === "created") {
       logger.info("Created embedded PostgreSQL database: paperclip");
     }
-  
-    const embeddedConnectionString = `postgres://paperclip:paperclip@127.0.0.1:${port}/paperclip`;
+
+    const embeddedConnectionString = buildEmbeddedPgUrl(pgCredsForConn, port, "paperclip");
     const shouldAutoApplyFirstRunMigrations = !clusterAlreadyInitialized || dbStatus === "created";
     if (shouldAutoApplyFirstRunMigrations) {
       logger.info("Detected first-run embedded PostgreSQL setup; applying pending migrations automatically");

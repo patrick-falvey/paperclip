@@ -153,6 +153,15 @@ export function activityService(db: Db) {
       return [fromContext, ...fromActivity];
     },
 
+    companyForRun: async (runId: string): Promise<string | null> => {
+      const row = await db
+        .select({ companyId: heartbeatRuns.companyId })
+        .from(heartbeatRuns)
+        .where(eq(heartbeatRuns.id, runId))
+        .then((rows) => rows[0] ?? null);
+      return row?.companyId ?? null;
+    },
+
     create: (data: typeof activityLog.$inferInsert) =>
       db
         .insert(activityLog)

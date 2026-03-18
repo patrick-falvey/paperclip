@@ -1,3 +1,5 @@
+import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import path from "node:path";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
@@ -5,10 +7,24 @@ import { formatDatabaseBackupResult, runDatabaseBackup } from "@paperclipai/db";
 import {
   expandHomePrefix,
   resolveDefaultBackupDir,
+  resolveDefaultEmbeddedPostgresDir,
   resolvePaperclipInstanceId,
 } from "../config/home.js";
 import { readConfig, resolveConfigPath } from "../config/store.js";
 import { printPaperclipCliBanner } from "../utils/banner.js";
+
+function readEmbeddedPgPassword(dataDir: string): string {
+  const credentialPath = path.resolve(dataDir, ".pg-password");
+  if (existsSync(credentialPath)) {
+    const stored = readFileSync(credentialPath, "utf8").trim();
+    if (stored.length > 0) return stored;
+  }
+  mkdirSync(dataDir, { recursive: true });
+  const password = randomBytes(24).toString("hex");
+  writeFileSync(credentialPath, password, { mode: 0o600 });
+  try { chmodSync(credentialPath, 0o600); } catch { /* best effort */ }
+  return password;
+}
 
 type DbBackupOptions = {
   config?: string;
@@ -28,8 +44,10 @@ function resolveConnectionString(configPath?: string): { value: string; source: 
   }
 
   const port = config?.database.embeddedPostgresPort ?? 54329;
+  const dataDir = config?.database.embeddedPostgresDataDir ?? resolveDefaultEmbeddedPostgresDir();
+  const pgPassword = readEmbeddedPgPassword(dataDir);
   return {
-    value: `postgres://paperclip:paperclip@127.0.0.1:${port}/paperclip`,
+    value: `postgres://paperclip:${pgPassword}@127.0.0.1:${port}/paperclip`,
     source: `embedded-postgres@${port}`,
   };
 }

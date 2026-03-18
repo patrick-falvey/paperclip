@@ -11,6 +11,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
+import { randomBytes } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
@@ -450,7 +451,8 @@ function resolveSourceConnectionString(config: PaperclipConfig, envEntries: Reco
   }
 
   const port = portOverride ?? config.database.embeddedPostgresPort;
-  return `postgres://paperclip:paperclip@127.0.0.1:${port}/paperclip`;
+  const pgPassword = getEmbeddedPgPassword(config.database.embeddedPostgresDataDir);
+  return `postgres://paperclip:${pgPassword}@127.0.0.1:${port}/paperclip`;
 }
 
 export function copySeededSecretsKey(input: {
@@ -502,6 +504,19 @@ export function copySeededSecretsKey(input: {
   }
 }
 
+function getEmbeddedPgPassword(dataDir: string): string {
+  const credentialPath = path.resolve(dataDir, ".pg-password");
+  if (existsSync(credentialPath)) {
+    const stored = readFileSync(credentialPath, "utf8").trim();
+    if (stored.length > 0) return stored;
+  }
+  mkdirSync(dataDir, { recursive: true });
+  const password = randomBytes(24).toString("hex");
+  writeFileSync(credentialPath, password, { mode: 0o600 });
+  try { chmodSync(credentialPath, 0o600); } catch { /* best effort */ }
+  return password;
+}
+
 async function ensureEmbeddedPostgres(dataDir: string, preferredPort: number): Promise<EmbeddedPostgresHandle> {
   const moduleName = "embedded-postgres";
   let EmbeddedPostgres: EmbeddedPostgresCtor;
@@ -525,10 +540,11 @@ async function ensureEmbeddedPostgres(dataDir: string, preferredPort: number): P
   }
 
   const port = await findAvailablePort(preferredPort);
+  const pgPassword = getEmbeddedPgPassword(dataDir);
   const instance = new EmbeddedPostgres({
     databaseDir: dataDir,
     user: "paperclip",
-    password: "paperclip",
+    password: pgPassword,
     port,
     persistent: true,
     initdbFlags: ["--encoding=UTF8", "--locale=C"],
@@ -600,9 +616,10 @@ async function seedWorktreeDatabase(input: {
       input.targetConfig.database.embeddedPostgresPort,
     );
 
-    const adminConnectionString = `postgres://paperclip:paperclip@127.0.0.1:${targetHandle.port}/postgres`;
+    const targetPgPassword = getEmbeddedPgPassword(input.targetConfig.database.embeddedPostgresDataDir);
+    const adminConnectionString = `postgres://paperclip:${targetPgPassword}@127.0.0.1:${targetHandle.port}/postgres`;
     await ensurePostgresDatabase(adminConnectionString, "paperclip");
-    const targetConnectionString = `postgres://paperclip:paperclip@127.0.0.1:${targetHandle.port}/paperclip`;
+    const targetConnectionString = `postgres://paperclip:${targetPgPassword}@127.0.0.1:${targetHandle.port}/paperclip`;
     await runDatabaseRestore({
       connectionString: targetConnectionString,
       backupFile: backup.backupFile,

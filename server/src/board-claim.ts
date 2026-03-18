@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import { companies, companyMemberships, instanceUserRoles } from "@paperclipai/db";
@@ -31,10 +31,15 @@ function createChallenge(now = new Date()): ClaimChallenge {
   };
 }
 
+function safeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(Buffer.from(a), Buffer.from(b));
+}
+
 function getChallengeStatus(token: string, code: string | undefined): ChallengeStatus {
   if (!activeChallenge) return "invalid";
-  if (activeChallenge.token !== token) return "invalid";
-  if (activeChallenge.code !== (code ?? "")) return "invalid";
+  if (!safeEqual(activeChallenge.token, token)) return "invalid";
+  if (!safeEqual(activeChallenge.code, code ?? "")) return "invalid";
   if (activeChallenge.claimedAt) return "claimed";
   if (activeChallenge.expiresAt.getTime() <= Date.now()) return "expired";
   return "available";
@@ -140,7 +145,7 @@ export async function claimBoardOwnership(
     }
   });
 
-  if (activeChallenge && activeChallenge.token === opts.token) {
+  if (activeChallenge && safeEqual(activeChallenge.token, opts.token)) {
     activeChallenge.claimedAt = new Date();
     activeChallenge.claimedByUserId = opts.userId;
   }

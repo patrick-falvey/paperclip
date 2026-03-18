@@ -80,7 +80,15 @@ export function activityRoutes(db: Db) {
 
   router.get("/heartbeat-runs/:runId/issues", async (req, res) => {
     const runId = req.params.runId as string;
+    // Resolve the run's company to enforce authorization
     const result = await svc.issuesForRun(runId);
+    const companyId = await svc.companyForRun(runId);
+    if (companyId) {
+      assertCompanyAccess(req, companyId);
+    } else if (req.actor.type === "none") {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
     res.json(result);
   });
 

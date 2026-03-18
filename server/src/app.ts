@@ -2,6 +2,8 @@ import express, { Router, type Request as ExpressRequest } from "express";
 import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import type { Db } from "@paperclipai/db";
 import type { DeploymentExposure, DeploymentMode } from "@paperclipai/shared";
 import type { StorageService } from "./storage/types.js";
@@ -71,6 +73,20 @@ export async function createApp(
 ) {
   const app = express();
 
+  // Security headers (CSP disabled for inline UI scripts; frame-ancestors blocks clickjacking)
+  app.use(helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+  }));
+
+  // Global rate limit: 300 requests per minute per IP
+  app.use(rateLimit({
+    windowMs: 60_000,
+    max: 300,
+    standardHeaders: true,
+    legacyHeaders: false,
+  }));
+
   app.use(express.json({
     verify: (req, _res, buf) => {
       (req as unknown as { rawBody: Buffer }).rawBody = buf;
@@ -128,6 +144,14 @@ export async function createApp(
     });
   });
   if (opts.betterAuthHandler) {
+    // Stricter rate limit on auth endpoints to prevent brute-force
+    app.use("/api/auth", rateLimit({
+      windowMs: 60_000,
+      max: 20,
+      standardHeaders: true,
+      legacyHeaders: false,
+      message: { error: "Too many authentication requests, please try again later" },
+    }));
     app.all("/api/auth/*authPath", opts.betterAuthHandler);
   }
   app.use(llmRoutes(db));

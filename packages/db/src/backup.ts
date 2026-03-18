@@ -1,4 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { formatDatabaseBackupResult, runDatabaseBackup } from "./backup-lib.js";
@@ -7,6 +8,7 @@ type PartialConfig = {
   database?: {
     mode?: "embedded-postgres" | "postgres";
     connectionString?: string;
+    embeddedPostgresDataDir?: string;
     embeddedPostgresPort?: number;
     backup?: {
       dir?: string;
@@ -59,6 +61,23 @@ function resolveEmbeddedPort(config: PartialConfig | null): number {
   return asPositiveInt(config?.database?.embeddedPostgresPort) ?? 54329;
 }
 
+function resolveDefaultEmbeddedPostgresDir(): string {
+  return path.resolve(resolvePaperclipHomeDir(), "instances", resolvePaperclipInstanceId(), "db");
+}
+
+function readEmbeddedPgPassword(dataDir: string): string {
+  const credentialPath = path.resolve(dataDir, ".pg-password");
+  if (existsSync(credentialPath)) {
+    const stored = readFileSync(credentialPath, "utf8").trim();
+    if (stored.length > 0) return stored;
+  }
+  mkdirSync(dataDir, { recursive: true });
+  const password = randomBytes(24).toString("hex");
+  writeFileSync(credentialPath, password, { mode: 0o600 });
+  try { chmodSync(credentialPath, 0o600); } catch { /* best effort */ }
+  return password;
+}
+
 function resolveConnectionString(config: PartialConfig | null): string {
   const envUrl = process.env.DATABASE_URL?.trim();
   if (envUrl) return envUrl;
@@ -69,7 +88,9 @@ function resolveConnectionString(config: PartialConfig | null): string {
   }
 
   const port = resolveEmbeddedPort(config);
-  return `postgres://paperclip:paperclip@127.0.0.1:${port}/paperclip`;
+  const dataDir = config?.database?.embeddedPostgresDataDir ?? resolveDefaultEmbeddedPostgresDir();
+  const pgPassword = readEmbeddedPgPassword(dataDir);
+  return `postgres://paperclip:${pgPassword}@127.0.0.1:${port}/paperclip`;
 }
 
 function resolveDefaultBackupDir(): string {

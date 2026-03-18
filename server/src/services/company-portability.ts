@@ -16,6 +16,7 @@ import type {
 } from "@paperclipai/shared";
 import { normalizeAgentUrlKey, portabilityManifestSchema } from "@paperclipai/shared";
 import { notFound, unprocessable } from "../errors.js";
+import { ssrfSafeFetch } from "../ssrf-guard.js";
 import { accessService } from "./access.js";
 import { agentService } from "./agents.js";
 import { companyService } from "./companies.js";
@@ -381,7 +382,7 @@ function parseFrontmatterMarkdown(raw: string): MarkdownDoc {
 }
 
 async function fetchJson(url: string) {
-  const response = await fetch(url);
+  const response = await ssrfSafeFetch(url);
   if (!response.ok) {
     throw unprocessable(`Failed to fetch ${url}: ${response.status}`);
   }
@@ -389,7 +390,7 @@ async function fetchJson(url: string) {
 }
 
 async function fetchText(url: string) {
-  const response = await fetch(url);
+  const response = await ssrfSafeFetch(url);
   if (!response.ok) {
     throw unprocessable(`Failed to fetch ${url}: ${response.status}`);
   }
